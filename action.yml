@@ -1,0 +1,33 @@
+name: nerve-verify
+description: Verify NerveSystem Asset Action Receipts in CI. Fails the job if any receipt fails.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  path:
+    description: A receipt .json file, or a directory of receipts.
+    required: true
+  pin-key:
+    description: Known-good hex public key for origin authentication (single-file mode only).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - shell: bash
+      run: pip install --quiet "${{ github.action_path }}"
+    - shell: bash
+      env:
+        RECEIPT_PATH: ${{ inputs.path }}
+        PIN_KEY: ${{ inputs.pin-key }}
+      run: |
+        if [ -d "$RECEIPT_PATH" ]; then
+          nerve-verify chain "$RECEIPT_PATH"
+        elif [ -n "$PIN_KEY" ]; then
+          nerve-verify check "$RECEIPT_PATH" --pin-key "$PIN_KEY"
+        else
+          nerve-verify check "$RECEIPT_PATH"
+        fi

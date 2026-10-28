@@ -6,6 +6,13 @@ license = "MIT"
 authors = [{ name = "NerveSystem" }]
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["ai-governance", "verification", "ed25519", "receipts", "audit", "tamper-evident"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Security :: Cryptography",
+    "Programming Language :: Python :: 3",
+]
 dependencies = [
     "cryptography>=42.0",
     "click>=8.1",
@@ -16,6 +23,9 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 nerve-verify = "nerve_verify.cli:main"
+
+[project.urls]
+Source = "https://github.com/ricocyber/nerve-verify"
 
 [build-system]
 requires = ["setuptools>=77"]

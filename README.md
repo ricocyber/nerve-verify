@@ -60,6 +60,25 @@ No network calls. Everything runs on your machine.
 
 Exit codes: `0` PASS, `1` FAIL, `2` unreadable input or bad usage.
 
+## Install from GitHub
+
+```bash
+pip install git+https://github.com/ricocyber/nerve-verify.git
+nerve-verify tamper-demo
+```
+
+## GitHub Action
+
+Fail a CI job when any receipt fails verification:
+
+```yaml
+- uses: actions/checkout@v4
+- uses: ricocyber/nerve-verify@main
+  with:
+    path: receipts/          # a .json file or a directory of receipts
+    # pin-key: <hex>         # optional, single-file mode: authenticate origin
+```
+
 ## Web verifier
 
 Open `web/index.html` in a browser, drop a receipt `.json` on it, and get the same
