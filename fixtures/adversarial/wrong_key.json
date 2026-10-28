@@ -1,0 +1,16 @@
+{
+  "schema_version": "nervesystem-receipt-v1",
+  "ontology_version": "nervesystem-ontology-2026-04-22",
+  "timestamp_utc": "2026-01-01T13:44:00+00:00",
+  "source_system": "demo-source",
+  "target_format": "demo-target",
+  "input_hash": "686868686868686868686868686868686868686868686868686868686868686868686868686868686868686868686868",
+  "output_hash": "696969696969696969696969696969696969696969696969696969696969696969696969696969696969696969696969",
+  "confidence": 0.902,
+  "elapsed_seconds": 0.032,
+  "anomalies": [],
+  "nervesystem_id": "demo-0104",
+  "signature": "f3ead7e83b5b066d2ac91916f5bdb9e0f8a46987aaed213d95d4329f052b2b6fe441d4128bfc51af043d2757d2652ec31d6e89640bc3808fb2d166f8c7b7f502",
+  "public_key": "279bd74fceefc8f31aef6f4a89c9d2b1b26f43c234eed4ba9d52c8ec1ecadebc",
+  "signature_algorithm": "Ed25519"
+}

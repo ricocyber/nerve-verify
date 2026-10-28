@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>nerve-verify — AAR Receipt Verifier</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0c0f;
+    --panel: #12151a;
+    --border: #262b33;
+    --text: #d8dde3;
+    --muted: #7a8390;
+    --pass: #3fb950;
+    --fail: #f85149;
+    --accent: #58a6ff;
+    --mono: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+  }
+  main {
+    width: 100%;
+    max-width: 780px;
+  }
+  header {
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.25rem;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.4rem 0;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  #drop {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  #drop.dragover {
+    border-color: var(--accent);
+    background: #0d1520;
+  }
+  #drop strong { color: var(--text); }
+  #file-input { display: none; }
+  #results { margin-top: 2rem; display: none; }
+  .receipt-name {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+    word-break: break-all;
+  }
+  .check-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.88rem;
+  }
+  .check-row:last-of-type { border-bottom: none; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 0.12rem 0.45rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+    min-width: 3.6rem;
+    text-align: center;
+  }
+  .badge.pass { color: var(--pass); background: #0d2415; border: 1px solid #1b4425; }
+  .badge.fail { color: var(--fail); background: #2b0f0d; border: 1px solid #4a1a17; }
+  .check-name { font-weight: 600; min-width: 6.5rem; flex-shrink: 0; }
+  .check-detail { color: var(--muted); }
+  .verdict {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1rem;
+    text-align: center;
+    letter-spacing: 0.03em;
+  }
+  .verdict.pass { background: #0d2415; color: var(--pass); border: 1px solid #1b4425; }
+  .verdict.fail { background: #2b0f0d; color: var(--fail); border: 1px solid #4a1a17; }
+  .note {
+    margin-top: 1.5rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  .error-box {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 6px;
+    background: #2b0f0d;
+    color: var(--fail);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>nerve-verify — Asset Action Receipt Verifier</h1>
+    <div class="subtitle">Verifies a receipt's structure, timestamp, and Ed25519 signature entirely in-browser. No network calls. No server. Works opened as a local file.</div>
+  </header>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Drop a receipt JSON file here, or click to choose one">
+    <div><strong>Drop a receipt .json file here</strong></div>
+    <div style="margin-top:0.4rem;">or click to choose a file</div>
+  </div>
+  <input type="file" id="file-input" accept=".json,application/json" />
+
+  <div id="results"></div>
+
+  <div class="note">
+    All verification runs locally via the browser's WebCrypto API — the receipt file never leaves
+    this page. Hash fields (<code>input_hash</code>/<code>output_hash</code>) are reported as
+    "present, not independently verified" unless you separately supply the original payload; this
+    tool never claims a hash check it did not actually perform.
+  </div>
+</main>
+
+<script>
+const SCHEMA_VERSION = "nervesystem-receipt-v1";
+const NON_BODY_FIELDS = new Set(["signature", "public_key", "signature_algorithm"]);
+const REQUIRED_FIELDS = [
+  "schema_version", "ontology_version", "timestamp_utc", "source_system",
+  "target_format", "input_hash", "output_hash", "confidence",
+  "elapsed_seconds", "anomalies", "nervesystem_id"
+];
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+function isHex(value, length) {
+  return typeof value === "string" && value.length === length && /^[0-9a-fA-F]+$/.test(value);
+}
+
+function isSha384Hex(value) {
+  return isHex(value, 96);
+}
+
+function canonicalBytes(obj) {
+  // Mirrors Python's json.dumps(obj, sort_keys=True, separators=(",", ":")).
+  function sortKeysDeep(value) {
+    if (Array.isArray(value)) return value.map(sortKeysDeep);
+    if (value !== null && typeof value === "object") {
+      const sorted = {};
+      for (const key of Object.keys(value).sort()) sorted[key] = sortKeysDeep(value[key]);
+      return sorted;
+    }
+    return value;
+  }
+  // Python's default ensure_ascii=True escapes every non-ASCII UTF-16 unit as \uXXXX.
+  const json = JSON.stringify(sortKeysDeep(obj)).replace(
+    /[\u007f-\uffff]/g,
+    (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0")
+  );
+  return new TextEncoder().encode(json);
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return bytes;
+}
+
+function validateSchema(receipt) {
+  const errors = [];
+  for (const f of REQUIRED_FIELDS) {
+    if (!(f in receipt)) errors.push(`missing required field: ${f}`);
+  }
+  if (receipt.schema_version !== SCHEMA_VERSION) {
+    errors.push(`unsupported schema_version: ${JSON.stringify(receipt.schema_version)} (expected "${SCHEMA_VERSION}")`);
+  }
+  for (const hf of ["input_hash", "output_hash"]) {
+    const val = receipt[hf];
+    if (val != null && !isSha384Hex(val)) errors.push(`${hf} is not a valid SHA-384 hex digest`);
+  }
+  return errors;
+}
+
+function verifyTimestamp(receipt) {
+  const raw = receipt.timestamp_utc;
+  const ts = new Date(raw);
+  if (isNaN(ts.getTime())) {
+    return { name: "timestamp", passed: false, detail: `not valid ISO 8601: ${JSON.stringify(raw)}` };
+  }
+  const now = Date.now();
+  if (ts.getTime() > now + CLOCK_SKEW_MS) {
+    return { name: "timestamp", passed: false, detail: `timestamp ${raw} is in the future beyond clock-skew tolerance` };
+  }
+  return { name: "timestamp", passed: true, detail: `${raw} is internally consistent` };
+}
+
+function verifyHashClaims(receipt) {
+  const results = [];
+  for (const hf of ["input_hash", "output_hash"]) {
+    const claimed = receipt[hf];
+    if (!isSha384Hex(claimed)) {
+      results.push({ name: hf, passed: false, detail: "not a valid SHA-384 hex digest" });
+      continue;
+    }
+    results.push({
+      name: hf, passed: true,
+      detail: "present, well-formed — NOT independently verified (no source payload supplied)"
+    });
+  }
+  return results;
+}
+
+// Ed25519 is not universally available via SubtleCrypto yet in every browser;
+// feature-detect and report clearly rather than silently failing.
+async function verifySignature(receipt) {
+  const sigHex = receipt.signature;
+  const pubHex = receipt.public_key;
+  const algo = receipt.signature_algorithm;
+
+  if (!sigHex || !pubHex || algo === "unavailable") {
+    return { name: "signature", passed: false, detail: "NO_SIGNATURE: signature or public_key absent" };
+  }
+
+  if (algo !== "Ed25519") {
+    return { name: "signature", passed: false, detail: `UNSUPPORTED_ALGORITHM: ${JSON.stringify(algo)} (expected "Ed25519")` };
+  }
+
+  if (!isHex(pubHex, 64) || !isHex(sigHex, 128)) {
+    return { name: "signature", passed: false, detail: "MALFORMED_KEY_OR_SIGNATURE: expected 64-hex public_key and 128-hex signature" };
+  }
+
+  if (!("subtle" in crypto)) {
+    return { name: "signature", passed: false, detail: "WebCrypto SubtleCrypto unavailable in this browser" };
+  }
+
+  try {
+    const body = {};
+    for (const k of Object.keys(receipt)) {
+      if (!NON_BODY_FIELDS.has(k)) body[k] = receipt[k];
+    }
+    const bodyBytes = canonicalBytes(body);
+    const pubBytes = hexToBytes(pubHex);
+    const sigBytes = hexToBytes(sigHex);
+
+    const key = await crypto.subtle.importKey(
+      "raw", pubBytes, { name: "Ed25519" }, false, ["verify"]
+    );
+    const ok = await crypto.subtle.verify("Ed25519", key, sigBytes, bodyBytes);
+    return ok
+      ? { name: "signature", passed: true, detail: "valid Ed25519 signature (self-consistent only — receipt not checked against a known/pinned key)" }
+      : { name: "signature", passed: false, detail: "signature verification failed: mismatch" };
+  } catch (err) {
+    return {
+      name: "signature", passed: false,
+      detail: `signature verification unavailable or failed: ${err.message}. ` +
+              `This browser may not yet support Ed25519 via WebCrypto — use the nerve-verify CLI as the authoritative check.`
+    };
+  }
+}
+
+async function verifyReceipt(receipt) {
+  const checks = [];
+  const schemaErrors = validateSchema(receipt);
+  if (schemaErrors.length > 0) {
+    checks.push({ name: "schema", passed: false, detail: schemaErrors.join("; ") });
+    return checks;
+  }
+  checks.push({ name: "schema", passed: true, detail: `matches ${SCHEMA_VERSION}` });
+  checks.push(verifyTimestamp(receipt));
+  checks.push(...verifyHashClaims(receipt));
+  checks.push(await verifySignature(receipt));
+  return checks;
+}
+
+function renderResults(filename, checks, fatalError) {
+  const el = document.getElementById("results");
+  el.style.display = "block";
+  el.innerHTML = "";
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "receipt-name";
+  nameEl.textContent = filename;
+  el.appendChild(nameEl);
+
+  if (fatalError) {
+    const box = document.createElement("div");
+    box.className = "error-box";
+    box.textContent = fatalError;
+    el.appendChild(box);
+    return;
+  }
+
+  for (const check of checks) {
+    const row = document.createElement("div");
+    row.className = "check-row";
+    const badge = document.createElement("span");
+    badge.className = `badge ${check.passed ? "pass" : "fail"}`;
+    badge.textContent = check.passed ? "PASS" : "FAIL";
+    const name = document.createElement("span");
+    name.className = "check-name";
+    name.textContent = check.name;
+    const detail = document.createElement("span");
+    detail.className = "check-detail";
+    detail.textContent = check.detail;
+    row.append(badge, name, detail);
+    el.appendChild(row);
+  }
+
+  const allPassed = checks.every((c) => c.passed);
+  const verdict = document.createElement("div");
+  verdict.className = `verdict ${allPassed ? "pass" : "fail"}`;
+  verdict.textContent = `verdict: ${allPassed ? "PASS" : "FAIL"}`;
+  el.appendChild(verdict);
+}
+
+async function handleFile(file) {
+  let receipt;
+  try {
+    const text = await file.text();
+    receipt = JSON.parse(text);
+  } catch (err) {
+    renderResults(file.name, [], `Failed to parse JSON: ${err.message}`);
+    return;
+  }
+  if (typeof receipt !== "object" || receipt === null || Array.isArray(receipt)) {
+    renderResults(file.name, [], "Top-level JSON is not an object.");
+    return;
+  }
+  const checks = await verifyReceipt(receipt);
+  renderResults(file.name, checks, null);
+}
+
+const drop = document.getElementById("drop");
+const fileInput = document.getElementById("file-input");
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") fileInput.click();
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+drop.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  drop.classList.add("dragover");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+</script>
+</body>
+</html>
