@@ -5,6 +5,7 @@ Exit codes: 0 = PASS, 1 = FAIL, 2 = usage or unreadable input.
 
 import copy
 import json
+import sys
 from pathlib import Path
 
 import click
@@ -28,9 +29,12 @@ def _print_report(label: str, report: VerificationReport) -> bool:
 
 def _load_json(path: Path) -> object:
     try:
-        return json.loads(path.read_text())
+        text = (sys.stdin.buffer.read().decode("utf-8")
+                if path == Path("-") else path.read_text(encoding="utf-8"))
+        return json.loads(text)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise click.UsageError(f"cannot read {path.name} as JSON: {exc}") from exc
+        label = "stdin" if path == Path("-") else path.name
+        raise click.UsageError(f"cannot read {label} as JSON: {exc}") from exc
 
 
 @click.group()
@@ -40,7 +44,7 @@ def main() -> None:
 
 
 @main.command()
-@click.argument("receipt_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("receipt_path", type=click.Path(exists=True, dir_okay=False, allow_dash=True, path_type=Path))
 @click.option("--input-file", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
               help="Original input payload, to independently verify input_hash.")
 @click.option("--output-file", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
@@ -49,7 +53,7 @@ def main() -> None:
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 def check(receipt_path: Path, input_file: Path | None, output_file: Path | None,
           pin_key: str | None, as_json: bool) -> None:
-    """Validate a single receipt: schema, hashes, signature, timestamp."""
+    """Validate a single receipt: schema, hashes, signature, timestamp. Use - for stdin."""
     receipt = _load_json(receipt_path)
     input_data = input_file.read_bytes() if input_file else None
     output_data = output_file.read_bytes() if output_file else None

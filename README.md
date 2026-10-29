@@ -51,6 +51,9 @@ the signature, and verifies again (FAIL).
 # Check one receipt
 .venv/bin/nerve-verify check fixtures/valid/valid_00.json
 
+# Read a receipt from stdin (the same exit codes apply)
+cat fixtures/valid/valid_00.json | .venv/bin/nerve-verify check - --json
+
 # Check against a known-good public key (origin authentication)
 .venv/bin/nerve-verify check receipt.json --pin-key <hex>
 

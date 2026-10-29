@@ -88,3 +88,49 @@ def test_cli_version():
     result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "nerve-verify" in result.output
+
+
+def test_cli_stdin_matches_file_verification():
+    for path, code in ((VALID, 0), (FIXTURES_DIR / "adversarial" / "forged_signature.json", 1)):
+        runner = CliRunner()
+        from_file = runner.invoke(main, ["check", str(path), "--json"])
+        from_stdin = runner.invoke(main, ["check", "-", "--json"], input=path.read_bytes())
+        assert from_stdin.exit_code == from_file.exit_code == code
+        file_report, stdin_report = json.loads(from_file.output), json.loads(from_stdin.output)
+        assert stdin_report.pop("receipt") == "-"
+        file_report.pop("receipt")
+        assert stdin_report == file_report
+
+
+def test_cli_stdin_text_output():
+    result = CliRunner().invoke(main, ["check", "-"], input=VALID.read_bytes())
+    assert result.exit_code == 0
+    assert "verdict: PASS" in result.output
+
+
+def test_cli_stdin_bad_json_exits_2_without_traceback():
+    for data in (b"", b"{not json", b"\xff"):
+        result = CliRunner().invoke(main, ["check", "-", "--json"], input=data)
+        assert result.exit_code == 2
+        assert "cannot read stdin as JSON" in result.output
+        assert "Traceback" not in result.output
+
+
+def test_cli_stdin_non_object_is_verification_failure():
+    result = CliRunner().invoke(main, ["check", "-", "--json"], input="[]")
+    assert result.exit_code == 1
+    assert json.loads(result.output)["verdict"] == "FAIL"
+
+
+def test_cli_stdin_applies_pin_and_payload_options(tmp_path):
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"synthetic mismatched payload")
+    options = ["--json", "--pin-key", "00" * 32, "--input-file", str(payload), "--output-file", str(payload)]
+    runner = CliRunner()
+    from_file = runner.invoke(main, ["check", str(VALID), *options])
+    from_stdin = runner.invoke(main, ["check", "-", *options], input=VALID.read_bytes())
+    assert from_stdin.exit_code == from_file.exit_code == 1
+    file_report, stdin_report = json.loads(from_file.output), json.loads(from_stdin.output)
+    file_report.pop("receipt")
+    stdin_report.pop("receipt")
+    assert stdin_report == file_report
