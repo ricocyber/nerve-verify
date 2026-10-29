@@ -1,6 +1,15 @@
 # nerve-verify
 
+[![tests](https://github.com/ricocyber/nerve-verify/actions/workflows/tests.yml/badge.svg)](https://github.com/ricocyber/nerve-verify/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![try it live](https://img.shields.io/badge/try%20it-in%20your%20browser-0E2547.svg)](https://ricocyber.github.io/nerve-verify/)
+
+**Your AI agent says it did X. Prove it.**
+
 **The gate is proprietary. The proof is public.**
+
+**[Try it in your browser →](https://ricocyber.github.io/nerve-verify/)** Load a signed receipt, change one
+field, and watch the signature break. Nothing leaves your machine.
 
 NerveSystem sits between AI agents and the physical world. Every action it approves or
 refuses produces a signed Asset Action Receipt (AAR). `nerve-verify` lets anyone check a
