@@ -11,6 +11,8 @@
 **[Try it in your browser →](https://ricocyber.github.io/nerve-verify/)** Load a signed receipt, change one
 field, and watch the signature break. Nothing leaves your machine.
 
+![Change one field and the signature breaks](docs/tamper-demo.gif)
+
 NerveSystem sits between AI agents and the physical world. Every action it approves or
 refuses produces a signed Asset Action Receipt (AAR). `nerve-verify` lets anyone check a
 receipt themselves — offline, without trusting NerveSystem's servers, and without access
